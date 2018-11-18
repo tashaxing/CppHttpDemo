@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string.h>
 #include <unordered_map>
 #include <functional>
 #include "../common/mongoose.h"
@@ -26,9 +27,13 @@ public:
 
 private:
 	// 静态事件响应函数
-	static void OnHttpEvent(mg_connection *connection, int event_type, void *event_data);
-	static void HandleEvent(mg_connection *connection, http_message *http_req);
-	static void SendRsp(mg_connection *connection, std::string rsp);
+	static void OnHttpWebsocketEvent(mg_connection *connection, int event_type, void *event_data);
+	static void HandleHttpEvent(mg_connection *connection, http_message *http_req);
+	static void SendHttpRsp(mg_connection *connection, std::string rsp);
+
+	static int isWebsocket(const mg_connection *connection); // 判断是否是websoket类型连接
+	static void HandleWebsocketMessage(mg_connection *connection, int event_type, websocket_message *ws_msg);
+	static void SendWebsocketMsg(mg_connection *connection, std::string msg);
 
 	std::string m_port;    // 端口
 	mg_mgr m_mgr;          // 连接管理器

@@ -12,9 +12,10 @@ void HttpServer::Init(const std::string &port)
 bool HttpServer::Start()
 {
 	mg_mgr_init(&m_mgr, NULL);
-	mg_connection *connection = mg_bind(&m_mgr, m_port.c_str(), OnHttpEvent);
+	mg_connection *connection = mg_bind(&m_mgr, m_port.c_str(), OnHttpWebsocketEvent);
 	if (connection == NULL)
 		return false;
+	// for both http and websocket
 	mg_set_protocol_http_websocket(connection);
 
 	printf("starting http server at port: %s\n", m_port.c_str());
@@ -25,19 +26,24 @@ bool HttpServer::Start()
 	return true;
 }
 
-void HttpServer::OnHttpEvent(mg_connection *connection, int event_type, void *event_data)
+void HttpServer::OnHttpWebsocketEvent(mg_connection *connection, int event_type, void *event_data)
 {
-	http_message *http_req = (http_message *)event_data;
-	switch (event_type)
+	// 区分http和websocket
+	if (event_type == MG_EV_HTTP_REQUEST)
 	{
-	case MG_EV_HTTP_REQUEST:
-		HandleEvent(connection, http_req);
-		break;
-	default:
-		break;
+		http_message *http_req = (http_message *)event_data;
+		HandleHttpEvent(connection, http_req);
+	}
+	else if (event_type == MG_EV_WEBSOCKET_HANDSHAKE_DONE ||
+		     event_type == MG_EV_WEBSOCKET_FRAME ||
+		     event_type == MG_EV_CLOSE)
+	{
+		websocket_message *ws_message = (struct websocket_message *)event_data;
+		HandleWebsocketMessage(connection, event_type, ws_message);
 	}
 }
 
+// ---- simple http ---- //
 static bool route_check(http_message *http_msg, char *route_prefix)
 {
 	if (mg_vcmp(&http_msg->uri, route_prefix) == 0)
@@ -67,7 +73,7 @@ void HttpServer::RemoveHandler(const std::string &url)
 		s_handler_map.erase(it);
 }
 
-void HttpServer::SendRsp(mg_connection *connection, std::string rsp)
+void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 {
 	// 必须先发送header
 	mg_printf(connection, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
@@ -79,7 +85,7 @@ void HttpServer::SendRsp(mg_connection *connection, std::string rsp)
 
 
 
-void HttpServer::HandleEvent(mg_connection *connection, http_message *http_req)
+void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_req)
 {
 	std::string req_str = std::string(http_req->message.p, http_req->message.len);
 	printf("got request: %s\n", req_str.c_str());
@@ -91,7 +97,7 @@ void HttpServer::HandleEvent(mg_connection *connection, http_message *http_req)
 	if (it != s_handler_map.end())
 	{
 		ReqHandler handle_func = it->second;
-		handle_func(url, body, connection, SendRsp);
+		handle_func(url, body, connection, SendHttpRsp);
 	}
 
 	// 其他请求
@@ -100,7 +106,7 @@ void HttpServer::HandleEvent(mg_connection *connection, http_message *http_req)
 	else if (route_check(http_req, "/api/hello")) 
 	{
 		// 直接回传
-		SendRsp(connection, "welcome to httpserver");
+		SendHttpRsp(connection, "welcome to httpserver");
 	}
 	else if (route_check(http_req, "/api/sum"))
 	{
@@ -114,7 +120,7 @@ void HttpServer::HandleEvent(mg_connection *connection, http_message *http_req)
 
 		/* Compute the result and send it back as a JSON object */
 		result = strtod(n1, NULL) + strtod(n2, NULL);
-		SendRsp(connection, std::to_string(result));
+		SendHttpRsp(connection, std::to_string(result));
 	}
 	else
 	{
@@ -124,6 +130,48 @@ void HttpServer::HandleEvent(mg_connection *connection, http_message *http_req)
 			"HTTP/1.1 501 Not Implemented\r\n"
 			"Content-Length: 0\r\n\r\n");
 	}
+}
+
+// ---- websocket ---- //
+int HttpServer::isWebsocket(const mg_connection *connection)
+{
+	return connection->flags & MG_F_IS_WEBSOCKET;
+}
+
+void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_type, websocket_message *ws_msg)
+{
+	if (event_type == MG_EV_WEBSOCKET_HANDSHAKE_DONE)
+	{
+		printf("client websocket connected\n");
+		// print addr
+		char addr[32];
+		mg_sock_addr_to_str(&connection->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP | MG_SOCK_STRINGIFY_PORT);
+		printf("client addr: %s\n", addr);
+		SendWebsocketMsg(connection, "client websocket connected");
+	}
+	else if (event_type == MG_EV_WEBSOCKET_FRAME)
+	{
+		mg_str received_msg = {
+			(char *)ws_msg->data, ws_msg->size
+		};
+
+		char buff[1024] = {0};
+		strncpy(buff, received_msg.p, received_msg.len);
+
+		// do sth to process request
+		printf("received msg: %s\n", buff);
+		SendWebsocketMsg(connection, "send your msg back: " + std::string(buff));
+	}
+	else if (event_type == MG_EV_CLOSE)
+	{
+		if (isWebsocket(connection))
+			printf("client websocket closed\n");
+	}
+}
+
+void HttpServer::SendWebsocketMsg(mg_connection *connection, std::string msg)
+{
+	mg_send_websocket_frame(connection, WEBSOCKET_OP_TEXT, msg.c_str(), strlen(msg.c_str()));
 }
 
 bool HttpServer::Close()
