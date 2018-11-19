@@ -6,13 +6,14 @@ void HttpServer::Init(const std::string &port)
 	m_port = port;
 	s_server_option.enable_directory_listing = "yes";
 	s_server_option.document_root = s_web_dir.c_str();
-	// TODO：其他设置
+
+	// TODO：其他http设置
 }
 
 bool HttpServer::Start()
 {
 	mg_mgr_init(&m_mgr, NULL);
-	mg_connection *connection = mg_bind(&m_mgr, m_port.c_str(), OnHttpWebsocketEvent);
+	mg_connection *connection = mg_bind(&m_mgr, m_port.c_str(), HttpServer::OnHttpWebsocketEvent);
 	if (connection == NULL)
 		return false;
 	// for both http and websocket
@@ -83,8 +84,6 @@ void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 	mg_send_http_chunk(connection, "", 0);
 }
 
-
-
 void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_req)
 {
 	std::string req_str = std::string(http_req->message.p, http_req->message.len);
@@ -97,7 +96,7 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_r
 	if (it != s_handler_map.end())
 	{
 		ReqHandler handle_func = it->second;
-		handle_func(url, body, connection, SendHttpRsp);
+		handle_func(url, body, connection, &HttpServer::SendHttpRsp);
 	}
 
 	// 其他请求
@@ -143,10 +142,14 @@ void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_typ
 	if (event_type == MG_EV_WEBSOCKET_HANDSHAKE_DONE)
 	{
 		printf("client websocket connected\n");
-		// print addr
+		// 获取连接客户端的IP和端口
 		char addr[32];
 		mg_sock_addr_to_str(&connection->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP | MG_SOCK_STRINGIFY_PORT);
 		printf("client addr: %s\n", addr);
+
+		// 添加 session
+		s_websocket_session_set.insert(connection);
+
 		SendWebsocketMsg(connection, "client websocket connected");
 	}
 	else if (event_type == MG_EV_WEBSOCKET_FRAME)
@@ -156,22 +159,34 @@ void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_typ
 		};
 
 		char buff[1024] = {0};
-		strncpy(buff, received_msg.p, received_msg.len);
+		strncpy(buff, received_msg.p, received_msg.len); // must use strncpy, specifiy memory pointer and length
 
 		// do sth to process request
 		printf("received msg: %s\n", buff);
 		SendWebsocketMsg(connection, "send your msg back: " + std::string(buff));
+		//BroadcastWebsocketMsg("broadcast msg: " + std::string(buff));
 	}
 	else if (event_type == MG_EV_CLOSE)
 	{
 		if (isWebsocket(connection))
+		{
 			printf("client websocket closed\n");
+			// 移除session
+			if (s_websocket_session_set.find(connection) != s_websocket_session_set.end())
+				s_websocket_session_set.erase(connection);
+		}
 	}
 }
 
 void HttpServer::SendWebsocketMsg(mg_connection *connection, std::string msg)
 {
 	mg_send_websocket_frame(connection, WEBSOCKET_OP_TEXT, msg.c_str(), strlen(msg.c_str()));
+}
+
+void HttpServer::BroadcastWebsocketMsg(std::string msg)
+{
+	for (mg_connection *connection : s_websocket_session_set)
+		mg_send_websocket_frame(connection, WEBSOCKET_OP_TEXT, msg.c_str(), strlen(msg.c_str()));
 }
 
 bool HttpServer::Close()

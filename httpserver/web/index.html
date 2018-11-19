@@ -5,7 +5,7 @@
 
 <script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
 <script type="text/javascript">
-
+    // simple http
     $(document).ready(function(){
      $("button").click(function(){
         $.get("/api/hello",function(data, status){
@@ -28,16 +28,37 @@
       });
     });
 
+    // websocket
+    var websocket = new WebSocket('ws://' + location.host + '/ws');
+    websocket.onopen = function (ev) {
+        console.log(ev.data);
+    };
+    websocket.onerror = function (ev) {
+        console.log(ev.data);
+    };
+    websocket.onclose = function (ev) {
+        console.log(ev.data);
+    };
+    websocket.onmessage = function (ev) {
+        console.log(ev.data);
+
+        document.getElementById("ws_text").innerHTML = ev.data;
+    };
+
+    window.onload = function () {
+        document.getElementById('send_button').onclick = function (ev) {
+            var msg = document.getElementById('send_input').value;
+            websocket.send(msg);
+        };
+    };
 </script>
 </head>
 <body>
     <h1>c++ httpserver demo</h1>
 
-    <p>
-      front end request
-    </p>
+    <h2>simple http</h2>
 
-    <h2>GET</h2>
+    <h3>GET</h3>
     <div>
         <button id="btn">get request</button>
     </div>
@@ -45,7 +66,7 @@
      <label>Result1:</label> <span id="result1">&nbsp;</span>
     </div>
 
-    <h2>POST</h2>
+    <h3>POST</h3>
     <div>
       <label>Number 1:</label> <input type="text" id="n1" />
     </div>
@@ -54,6 +75,15 @@
     </div>
     <div>
      <label>Result2:</label> <span id="result2">&nbsp;</span>
+    </div>
+
+    <h2>websocket</h2>
+
+    <div>
+        <span id="ws_text">&nbsp;</span>
+        <br />
+        <input type="text" id="send_input" />
+        <button id="send_button">Send</button>
     </div>
 
 </body>
