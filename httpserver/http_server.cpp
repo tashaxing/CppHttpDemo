@@ -76,7 +76,7 @@ void HttpServer::RemoveHandler(const std::string &url)
 
 void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 {
-	// 必须先发送header
+	// 必须先发送header, 也可以用HTTP/2.0
 	mg_printf(connection, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
 	// 以json形式返回
 	mg_printf_http_chunk(connection, "{ \"result\": %s }", rsp.c_str());
@@ -126,7 +126,7 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_r
 		mg_printf(
 			connection,
 			"%s",
-			"HTTP/1.1 501 Not Implemented\r\n"
+			"HTTP/1.1 501 Not Implemented\r\n" // 也可以用HTTP/2.0
 			"Content-Length: 0\r\n\r\n");
 	}
 }
