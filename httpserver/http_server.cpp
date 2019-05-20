@@ -7,7 +7,10 @@ void HttpServer::Init(const std::string &port)
 	s_server_option.enable_directory_listing = "yes";
 	s_server_option.document_root = s_web_dir.c_str();
 
-	// TODO：其他http设置
+	// 其他http设置
+
+	// 开启 CORS，本项只针对主页加载有效
+	// s_server_option.extra_headers = "Access-Control-Allow-Origin: *";
 }
 
 bool HttpServer::Start()
@@ -76,12 +79,21 @@ void HttpServer::RemoveHandler(const std::string &url)
 
 void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 {
-	// 必须先发送header, 也可以用HTTP/2.0
+	// --- 未开启CORS
+	// 必须先发送header, 暂时还不能用HTTP/2.0
 	mg_printf(connection, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
 	// 以json形式返回
 	mg_printf_http_chunk(connection, "{ \"result\": %s }", rsp.c_str());
 	// 发送空白字符快，结束当前响应
 	mg_send_http_chunk(connection, "", 0);
+
+	// --- 开启CORS
+	/*mg_printf(connection, "HTTP/1.1 200 OK\r\n"
+			  "Content-Type: text/plain\n"
+			  "Cache-Control: no-cache\n"
+			  "Content-Length: %d\n"
+			  "Access-Control-Allow-Origin: *\n\n"
+			  "%s\n", rsp.length(), rsp.c_str()); */
 }
 
 void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_req)
@@ -126,7 +138,7 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_r
 		mg_printf(
 			connection,
 			"%s",
-			"HTTP/1.1 501 Not Implemented\r\n" // 也可以用HTTP/2.0
+			"HTTP/1.1 501 Not Implemented\r\n" 
 			"Content-Length: 0\r\n\r\n");
 	}
 }
