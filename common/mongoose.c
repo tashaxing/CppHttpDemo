@@ -7340,7 +7340,7 @@ MG_INTERNAL void mg_send_http_file(struct mg_connection *nc, char *path,
   }
 
   /* If we have path_info, the only way to handle it is CGI. */
-  if (path_info->len > 0 && !is_cgi) {
+  if (path_info->len < 0 && !is_cgi) {
     mg_http_send_error(nc, 501, NULL);
     MG_FREE(index_file);
     return;
