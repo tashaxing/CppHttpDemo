@@ -7,9 +7,60 @@
 #include <functional>
 #include "../common/mongoose.h"
 
-// ¶¨Òåhttp·µ»Øcallback
+// å®šä¹‰httpè¿”å›callback
+typedef void OnRspCallback(mg_connection *c, std::string);#pragma once
+
+#include <string>
+#include <string.h>
+#include <unordered_map>
+#include <unordered_set>
+#include <functional>
+#include "../common/mongoose.h"
+#include "../common/winini.h"
+
+// å®šä¹‰httpè¿”å›callback
 typedef void OnRspCallback(mg_connection *c, std::string);
-// ¶¨ÒåhttpÇëÇóhandler
+// å®šä¹‰httpè¯·æ±‚handler
+using ReqHandler = std::function<bool (std::string, std::string, mg_connection *c, OnRspCallback)>;
+
+class HttpServer
+{
+public:
+	HttpServer() {
+		CMyINI* ini = new CMyINI();
+		ini->ReadINI("D:/C++/Projects/Network/Server/x64/Debug/regedit.ini");
+		s_web_dir = ini->GetValue("dir", "web");}
+	~HttpServer() {}
+	void Init(const std::string &port); // åˆå§‹åŒ–è®¾ç½®
+	bool Start(); // å¯åŠ¨httpserver
+	bool Close(); // å…³é—­
+	void AddHandler(const std::string &url, ReqHandler req_handler); // æ³¨å†Œäº‹ä»¶å¤„ç†å‡½æ•°
+	void RemoveHandler(const std::string &url); // ç§»é™¤æ—¶é—´å¤„ç†å‡½æ•°
+	//static std::string s_web_dir; // ç½‘é¡µæ ¹ç›®å½• 
+	
+	static mg_serve_http_opts s_server_option; // webæœåŠ¡å™¨é€‰é¡¹
+	static std::unordered_map<std::string, ReqHandler> s_handler_map; // å›è°ƒå‡½æ•°æ˜ å°„è¡¨
+private:
+	// é™æ€äº‹ä»¶å“åº”å‡½æ•°
+	std::string s_web_dir;
+
+	static void OnHttpWebsocketEvent(mg_connection *connection, int event_type, void *event_data);
+
+	static void HandleHttpEvent(mg_connection *connection, http_message *http_req);
+	static void SendHttpRsp(mg_connection *connection, std::string rsp);
+
+	static int isWebsocket(const mg_connection *connection); // åˆ¤æ–­æ˜¯å¦æ˜¯websoketç±»å‹è¿æ¥
+	static void HandleWebsocketMessage(mg_connection *connection, int event_type, websocket_message *ws_msg); 
+	static void SendWebsocketMsg(mg_connection *connection, std::string msg); // å‘é€æ¶ˆæ¯åˆ°æŒ‡å®šè¿æ¥
+	static void BroadcastWebsocketMsg(std::string msg); // ç»™æ‰€æœ‰è¿æ¥å¹¿æ’­æ¶ˆæ¯
+	static std::unordered_set<mg_connection *> s_websocket_session_set; // ç¼“å­˜websocketè¿æ¥
+
+	std::string m_port;    // ç«¯å£
+	mg_mgr m_mgr;          // è¿æ¥ç®¡ç†å™¨
+};
+
+
+// å®šä¹‰httpè¯·æ±‚handler
 using ReqHandler = std::function<bool (std::string, std::string, mg_connection *c, OnRspCallback)>;
 
 class HttpServer
@@ -17,29 +68,29 @@ class HttpServer
 public:
 	HttpServer() {}
 	~HttpServer() {}
-	void Init(const std::string &port); // ³õÊ¼»¯ÉèÖÃ
-	bool Start(); // Æô¶¯httpserver
-	bool Close(); // ¹Ø±Õ
-	void AddHandler(const std::string &url, ReqHandler req_handler); // ×¢²áÊÂ¼ş´¦Àíº¯Êı
-	void RemoveHandler(const std::string &url); // ÒÆ³ıÊ±¼ä´¦Àíº¯Êı
-	static std::string s_web_dir; // ÍøÒ³¸ùÄ¿Â¼ 
-	static mg_serve_http_opts s_server_option; // web·şÎñÆ÷Ñ¡Ïî
-	static std::unordered_map<std::string, ReqHandler> s_handler_map; // »Øµ÷º¯ÊıÓ³Éä±í
+	void Init(const std::string &port); // åˆå§‹åŒ–è®¾ç½®
+	bool Start(); // å¯åŠ¨httpserver
+	bool Close(); // å…³é—­
+	void AddHandler(const std::string &url, ReqHandler req_handler); // æ³¨å†Œäº‹ä»¶å¤„ç†å‡½æ•°
+	void RemoveHandler(const std::string &url); // ç§»é™¤æ—¶é—´å¤„ç†å‡½æ•°
+	static std::string s_web_dir; // ç½‘é¡µæ ¹ç›®å½• 
+	static mg_serve_http_opts s_server_option; // webæœåŠ¡å™¨é€‰é¡¹
+	static std::unordered_map<std::string, ReqHandler> s_handler_map; // å›è°ƒå‡½æ•°æ˜ å°„è¡¨
 
 private:
-	// ¾²Ì¬ÊÂ¼şÏìÓ¦º¯Êı
+	// é™æ€äº‹ä»¶å“åº”å‡½æ•°
 	static void OnHttpWebsocketEvent(mg_connection *connection, int event_type, void *event_data);
 
 	static void HandleHttpEvent(mg_connection *connection, http_message *http_req);
 	static void SendHttpRsp(mg_connection *connection, std::string rsp);
 
-	static int isWebsocket(const mg_connection *connection); // ÅĞ¶ÏÊÇ·ñÊÇwebsoketÀàĞÍÁ¬½Ó
+	static int isWebsocket(const mg_connection *connection); // åˆ¤æ–­æ˜¯å¦æ˜¯websoketç±»å‹è¿æ¥
 	static void HandleWebsocketMessage(mg_connection *connection, int event_type, websocket_message *ws_msg); 
-	static void SendWebsocketMsg(mg_connection *connection, std::string msg); // ·¢ËÍÏûÏ¢µ½Ö¸¶¨Á¬½Ó
-	static void BroadcastWebsocketMsg(std::string msg); // ¸øËùÓĞÁ¬½Ó¹ã²¥ÏûÏ¢
-	static std::unordered_set<mg_connection *> s_websocket_session_set; // »º´æwebsocketÁ¬½Ó
+	static void SendWebsocketMsg(mg_connection *connection, std::string msg); // å‘é€æ¶ˆæ¯åˆ°æŒ‡å®šè¿æ¥
+	static void BroadcastWebsocketMsg(std::string msg); // ç»™æ‰€æœ‰è¿æ¥å¹¿æ’­æ¶ˆæ¯
+	static std::unordered_set<mg_connection *> s_websocket_session_set; // ç¼“å­˜websocketè¿æ¥
 
-	std::string m_port;    // ¶Ë¿Ú
-	mg_mgr m_mgr;          // Á¬½Ó¹ÜÀíÆ÷
+	std::string m_port;    // ç«¯å£
+	mg_mgr m_mgr;          // è¿æ¥ç®¡ç†å™¨
 };
 
